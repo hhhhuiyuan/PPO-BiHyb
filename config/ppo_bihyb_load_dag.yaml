@@ -1,0 +1,31 @@
+scheduler_type: cp
+#num_init_dags: 50
+#resource_limit: 6000
+load_data: true
+train_path: /data/shared/huiyuan/dag34_addedge/train.pkl
+test_path: /data/shared/huiyuan/dag34_new/val.pkl
+train_sample: 1280
+test_sample: 128
+
+# learning configs
+gamma: 0.95
+batch_size: 1
+lr_steps: []
+max_timesteps: 5
+k_epochs: 10
+update_timestep: 20
+learning_rate: 0.001
+eps_clip: 0.1
+
+# model parameters
+node_output_size: 64 #16
+gnn_layers: 5
+
+# test parameters
+search_size: 3
+
+# misc configs
+log_interval: 1
+test_interval: 50
+max_episodes: 5000
+test_model_weight: pretrained/PPO_cp_dag_num50_beam3_ratio0.0892.pt

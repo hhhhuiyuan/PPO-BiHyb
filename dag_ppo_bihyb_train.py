@@ -8,6 +8,7 @@ import subprocess
 import sys
 import random
 import numpy as np
+import pickle
 from torch.multiprocessing import Pool, cpu_count
 from copy import deepcopy
 
@@ -17,6 +18,9 @@ from utils.tfboard_helper import TensorboardUtil
 from utils.dag_graph import DAGraph
 from dag_data.dag_generator import load_tpch_tuples
 from dag_ppo_bihyb_eval import evaluate
+import warnings
+
+warnings.filterwarnings("ignore", category=FutureWarning)
 
 
 class ItemsContainer:
@@ -232,18 +236,49 @@ def main(args):
                         feature_dim=args.node_feature_dim,
                         scheduler_type=args.scheduler_type)
 
-    # load training/testing data
-    vargs = (
-        dag_graph,
-        args.num_init_dags,
-        raw_node_feature_dim,
-        resource_dim,
-        args.resource_limit,
-        args.add_graph_features,
-        args.scheduler_type
-    )
-    tuples_train, tuples_test = \
-        load_tpch_tuples(args.train_sample, 0, *vargs), load_tpch_tuples(args.test_sample, 1, *vargs)
+    if not args.load_dag:
+        # generate training/testing data
+        vargs = (
+            dag_graph,
+            args.num_init_dags,
+            raw_node_feature_dim,
+            resource_dim,
+            args.resource_limit,
+            args.add_graph_features,
+            args.scheduler_type
+        )
+        tuples_train, tuples_test = \
+            load_tpch_tuples(args.train_sample, 0, *vargs), load_tpch_tuples(args.test_sample, 1, *vargs)
+    else:
+        # load training/testing data
+        with open(args.train_path, 'rb') as f:
+            # load a subset to train
+            train_rawdata = pickle.load(f)
+            train_rawdata = train_rawdata[:args.test_sample]
+        print(f"Load {len(train_rawdata)} dags for training")
+        tuples_train = []
+        for graph in train_rawdata:
+            inp_graph = graph
+            ori_greedy, _ = dag_graph.makespan_time(inp_graph, args.scheduler_type)
+            tuples_train.append((inp_graph, ori_greedy))
+    
+        with open(args.test_path, 'rb') as f:
+            test_rawdata = pickle.load(f)
+            # load a subset to test
+            test_rawdata = test_rawdata[:args.test_sample]
+        print(f"Load {len(test_rawdata)} dags for testing")
+        tuples_test = []
+        for graph in test_rawdata:
+            inp_graph = graph
+            ori_greedy, _ = dag_graph.makespan_time(inp_graph, args.scheduler_type)
+            sfs, _ = dag_graph.shortest_first_scheduling(inp_graph)
+            cps, _ = dag_graph.critical_path_scheduling(inp_graph)
+            ts, _ = dag_graph.tetris_scheduling(inp_graph)
+            baselines = {'shortest_first': sfs,
+                        'critical_path': cps,
+                        'tetris': ts}
+            tuples_test.append((inp_graph, ori_greedy, None, baselines))
+
 
     # create tensorboard summary writer
     try:
@@ -281,7 +316,11 @@ def main(args):
         items_batch = ItemsContainer()
         for b in range(args.batch_size):
             graph_index = ((i_episode - 1) * args.batch_size + b) % len(tuples_train)
-            inp_graph, ori_greedy, _, baselines = tuples_train[graph_index]  # we treat inp_graph as the state
+            if not args.load_dag:
+                inp_graph, ori_greedy, _, baselines = tuples_train[graph_index]  # we treat inp_graph as the state
+            else:
+                inp_graph, ori_greedy = tuples_train[graph_index]
+
             greedy = ori_greedy
             edge_candidates = dag_graph.get_edge_candidates(inp_graph)
             items_batch.append(0, inp_graph, greedy, edge_candidates, False, ori_greedy)
@@ -409,6 +448,9 @@ def parse_arguments():
     parser.add_argument('--gamma', default=0.99, type=float, help='discount factor for accumulated reward')
     parser.add_argument('--train_sample', default=50, type=int, help='number of training samples')
     parser.add_argument('--test_sample', default=50, type=int, help='number of testing samples')
+    parser.add_argument('--load_dag', action='store_true')
+    parser.add_argument('--train_path', default='', type=str)
+    parser.add_argument('--test_path', default='', type=str)
 
     # decode(testing) configs
     # parser.add_argument('--beam_search', action='store_true')
@@ -443,7 +485,7 @@ def parse_arguments():
 
     if args.config:
         with open('config/' + args.config) as f:
-            cfg_dict = yaml.load(f)
+            cfg_dict = yaml.load(f, Loader=yaml.SafeLoader)
             for key, val in cfg_dict.items():
                 assert hasattr(args, key), f'Unknown config key: {key}'
                 setattr(args, key, val)

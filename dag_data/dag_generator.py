@@ -4,7 +4,8 @@ import networkx as nx
 import random
 from copy import deepcopy
 from dag_data.dag_dict import dag_data_dict
-
+import pickle
+from tqdm import tqdm
 
 class SetWithCount(object):
     """
@@ -235,6 +236,54 @@ def generate_tpch_jobs(resource_limit=600.0, feature_dim=2, resource_dim=1, num_
         roots.extend(root)
     return job_dags, roots, graphs
 
+def load_tpch_combos34(resource_limit=600, feature_dim=2, resource_dim=1, num_init_dags=5, tid=0, dag_id=0):
+    args = Args(feature_dim=feature_dim, resource_dim=resource_dim,
+                num_init_dags=num_init_dags)
+    job_dags, roots, offsets, graphs = [], [], [], []
+    offset = 1
+    np.random.seed(int(resource_limit + num_init_dags + tid) * (dag_id + 1))
+    combo_menu = {"tpch_node4": [1,14,19], "tpch_node6": [3,4,12], "tpch_node7": [13,15], "tpch_node8": [22,18], "tpch_node9": [10,16]}
+    tpchs = [random.choice(v) for v in combo_menu.values()]
+    #print(tpchs)
+
+    for i, t in enumerate(tpchs):
+        offsets.append(offset)
+
+        query_idx = t
+        query_size = args.tpch_size[np.random.randint(0, len(args.tpch_size))]
+
+        job_dag, root = load_job(resource_limit, feature_dim, resource_dim, args.job_folder,
+                                 query_size, query_idx, args.tpch_num, offset)
+        offset += len(job_dag.nodes())
+        graphs.append((query_size, query_idx))
+        job_dags.append(job_dag)
+        roots.extend(root)
+    return job_dags, roots, graphs
+
+def load_tpch_combos52(resource_limit=600, feature_dim=2, resource_dim=1, num_init_dags=5, tid=0, dag_id=0):
+    args = Args(feature_dim=feature_dim, resource_dim=resource_dim,
+                num_init_dags=num_init_dags)
+    job_dags, roots, offsets, graphs = [], [], [], []
+    offset = 1
+    np.random.seed(int(resource_limit + num_init_dags + tid) * (dag_id + 1))
+    combo_menu = {"tpch_node4": [1,14,19], "tpch_node6": [3,4,12], "tpch_node7": [13,15], "tpch_node8": [22,18], "tpch_node9": [10,16],
+                  "tpch_node18": [2, 8]}
+    tpchs = [random.choice(v) for v in combo_menu.values()]
+    #print(tpchs)
+
+    for i, t in enumerate(tpchs):
+        offsets.append(offset)
+
+        query_idx = t
+        query_size = args.tpch_size[np.random.randint(0, len(args.tpch_size))]
+
+        job_dag, root = load_job(resource_limit, feature_dim, resource_dim, args.job_folder,
+                                 query_size, query_idx, args.tpch_num, offset)
+        offset += len(job_dag.nodes())
+        graphs.append((query_size, query_idx))
+        job_dags.append(job_dag)
+        roots.extend(root)
+    return job_dags, roots, graphs
 
 def add_graph_features(graph, dag_graph):
     path_to_leaf_scores = dag_graph.longest_path_to_any_leaf(
@@ -259,7 +308,6 @@ def add_graph_features(graph, dag_graph):
     global_features['features'].append(0.0)
     graph.graph.update(global_features)
     return graph
-
 
 def load_tpch_tuples(num_graphs, tid, dag_graph,
                      num_init_dags,
@@ -305,20 +353,20 @@ def load_tpch_tuples(num_graphs, tid, dag_graph,
                           round(np.max(resource_list[i]), 5))
                          for i in range(resource_dim)]
         sizes = [len(dag.nodes()) for dag in dags]
-        sft = dag_graph.makespan_time(merged_dag, scheduler_type)
+        sft, _ = dag_graph.makespan_time(merged_dag, scheduler_type)
 
         # sfs, cps, ts = -1, -1, -1
-        sfs = dag_graph.shortest_first_scheduling(merged_dag)
-        cps = dag_graph.critical_path_scheduling(merged_dag)
-        ts = dag_graph.tetris_scheduling(merged_dag)
+        sfs, _ = dag_graph.shortest_first_scheduling(merged_dag)
+        cps, _ = dag_graph.critical_path_scheduling(merged_dag)
+        ts, _ = dag_graph.tetris_scheduling(merged_dag)
         print('graphs', sizes,
               'nodes', len(merged_dag.nodes()),
-              'dags', graphs,
+              #'dags', graphs,
               'sft', round(sft, 6),
               'shortest_first', round(sfs, 6),
               'critical_path', round(cps, 6),
               'tetris', round(ts, 6),
-              'resource', resource_dist,
+              #'resource', resource_dist,
               #'resource', [sorted(l) for l in resource_list]
               )
         tuples.append((merged_dag, sft, graphs,
@@ -337,5 +385,111 @@ def load_tpch_tuples(num_graphs, tid, dag_graph,
           f'shortest_first mean={avg_sfs:.4f} std={std_sfs:.4f} '
           f'critical_path mean={avg_cps:.4f} std={std_cps:.4f} '
           f'tetris mean={avg_ts:.4f} std={std_ts:.4f} '
-          f'selected_graphs {selected_graphs}')
+          #f'selected_graphs {selected_graphs}'
+          )
     return tuples
+
+def generate_diffusion_tpch(num_graphs, combo_flag, dag_graph,
+                     num_init_dags,
+                     raw_node_feature_dim,
+                     resource_dim, 
+                     resource_limit, 
+                     resource_scale, 
+                     add_graph_features,
+                     scheduler_type = None,
+                     ):
+    all_graphs = []
+    batch_size = 8
+    num_rounds = num_graphs // batch_size
+    for _ in tqdm(range(num_rounds)):
+        scheduled_dags = []
+        selected_graphs = []
+    
+        for dag_id in range(batch_size):
+            if not combo_flag:
+                dags, roots, graphs = generate_tpch_jobs(
+                    resource_limit=resource_limit,
+                    feature_dim=raw_node_feature_dim, resource_dim=resource_dim,
+                    num_init_dags=num_init_dags)
+            elif combo_flag == "combo34":
+                dags, roots, graphs = load_tpch_combos34(
+                    resource_limit=resource_limit,
+                    feature_dim=raw_node_feature_dim, resource_dim=resource_dim,
+                    num_init_dags=num_init_dags)
+            elif combo_flag == "combo52":
+                dags, roots, graphs = load_tpch_combos52(
+                    resource_limit=resource_limit,
+                    feature_dim=raw_node_feature_dim, resource_dim=resource_dim,
+                    num_init_dags=num_init_dags)
+                
+            dummy_features = [0.0] * raw_node_feature_dim
+            merged_dag = nx.DiGraph()
+            merged_dag.add_node(0, features=dummy_features)
+            merged_dag.graph["features"] = dummy_features
+
+            for dag in dags:
+                merged_dag.add_nodes_from(dag.nodes(data=True))
+                merged_dag.add_edges_from(dag.edges(data=True))
+            for root in roots:
+                merged_dag.add_edge(root, 0, features=dummy_features)
+            if add_graph_features:
+                merged_dag = add_graph_features(merged_dag)
+            selected_graphs.append((graphs, len(merged_dag.nodes()) - 1))
+            sizes = [len(dag.nodes()) for dag in dags]
+            
+            # resource_list = []
+            # for i in range(resource_dim):
+            #     resource_list.append([])
+            # for node, data in merged_dag.nodes(data=True):
+            #     for i in range(resource_dim):
+            #         resource_list[i].append(data['features'][1 + i])
+            # resource_dist = [(round(np.min(resource_list[i]), 5),
+            #                   round(np.mean(resource_list[i]), 5),
+            #                   round(np.max(resource_list[i]), 5))
+            #                  for i in range(resource_dim)]
+            #picked_scheduler, picked_order = dag_graph.makespan_time(merged_dag, scheduler_type)
+            
+            # total_spend = 0
+            # total_res = 0
+            # for node, data in merged_dag.nodes(data=True):
+            #     total_spend = max(total_spend, data['features'][0]) 
+            #     total_res += data['features'][1]
+            # print("total spend", total_spend)
+            # print("total resource", total_res)
+
+            if combo_flag:
+                for node, data in merged_dag.nodes(data=True):
+                    data['features'][1] =  min(data['features'][1]*20.0, 0.99)
+            else:
+                if resource_scale > 0:
+                    for node, data in merged_dag.nodes(data=True):
+                        data['features'][1] =  min(data['features'][1]*resource_scale, 0.99)
+            
+            if not scheduler_type:
+                available_scheduler = ['shortest_first', 'critical_path', 'tetris']
+                scheduler = random.choice(available_scheduler)
+                if scheduler == 'shortest_first':
+                    time_cost, order = dag_graph.shortest_first_scheduling(merged_dag)
+                elif scheduler == 'critical_path':
+                    time_cost, order = dag_graph.critical_path_scheduling(merged_dag)
+                elif scheduler == 'tetris':
+                    time_cost, order = dag_graph.tetris_scheduling(merged_dag)
+            #default scheduler is critial path
+            elif scheduler_type == 'cp':
+                scheduler = 'critical_path'
+                time_cost, order = dag_graph.critical_path_scheduling(merged_dag)
+            
+            merged_dag.graph['scheduler'] = scheduler
+            merged_dag.graph['order'] = order
+            merged_dag.graph['makespan'] = time_cost
+            # print(time_cost)
+            # print('graphs', sizes,
+            #   'nodes', len(merged_dag.nodes()),
+            #   'critical_path', round(time_cost, 6),
+            #   )
+            scheduled_dags.append(merged_dag)
+
+        all_graphs.extend(scheduled_dags)
+        
+        print(len(all_graphs))
+    return all_graphs

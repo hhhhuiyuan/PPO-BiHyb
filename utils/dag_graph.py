@@ -8,7 +8,8 @@ import numpy as np
 import random
 import torch
 
-from queue import PriorityQueue
+from queue import PriorityQueue, Queue
+from collections import deque
 
 
 class DAGraph(object):
@@ -25,7 +26,7 @@ class DAGraph(object):
         new_graph.add_edge(act[1], act[0],
                            features=[0.0] * self.feature_dim)
         assert nx.is_directed_acyclic_graph(new_graph)
-        new_greedy = self.makespan_time(new_graph, self.scheduler_type)
+        new_greedy, _ = self.makespan_time(new_graph, self.scheduler_type)
         reward = prev_greedy - new_greedy
         edge_candidates = self.get_edge_candidates(new_graph)
         done = all([len(x) == 0 for x in edge_candidates.values()])
@@ -102,7 +103,7 @@ class DAGraph(object):
         features.extend(resources)
         return features
 
-    def generate_graph_tuples(self, num_samples=1, num_graph_range=(1,1)):
+    # def generate_graph_tupsles(self, num_samples=1, num_graph_range=(1,1)):
         tuples = []
         for i in range(num_samples):
             n_graphs = random.randint(num_graph_range[0], num_graph_range[1])
@@ -269,6 +270,65 @@ class DAGraph(object):
             graph.add_edge(edge[1], edge[0], features=[0.0] * self.feature_dim)
         return graph
 
+    def scheduling_evaluator(self, graph, order):
+        """
+        Evaluate the makespan time of the given order.
+            order: list node ids.
+            return: makespan time if the order is valid, otherwise None.
+        """
+        if sorted(order) != list(range(graph.number_of_nodes())):
+            return None
+        resource_dim = self.resource_limits.shape[0]
+        resource_limit = self.resource_limits
+        dep_map, _, features_map = self.get_dependency_nodes(graph)
+        run_queue = PriorityQueue()
+        used_resource = np.zeros(self.resource_dim)
+        wallclock = 0.0
+        job_queue = deque()
+        for node in order:
+            job_queue.append(node)
+        while not wallclock or job_queue or not run_queue.empty():
+            #import pdb; pdb.set_trace()
+            # peek finished jobs from run_queue
+            current_time = None
+            processed = []
+            while not run_queue.empty():
+                completion_time, spend, resource, node = run_queue.get()
+                resource = np.array(resource)
+                if current_time is None:
+                    current_time = completion_time
+                    assert wallclock <= current_time
+                    wallclock = current_time
+                if completion_time == current_time:
+                    used_resource = used_resource - resource
+                    dep_map = self.remove_dependency(dep_map, node)
+                    processed.append(node)
+                elif completion_time > current_time:
+                    run_queue.put((completion_time, spend, resource.tolist(), node))
+                    break
+                else:
+                    raise Exception('finish_time less than current_time')
+
+            ready_nodes = self.get_ready_nodes(dep_map)
+            ready_in_job_queue = 0
+            
+            if job_queue:
+                while job_queue and job_queue[0] in ready_nodes:
+                    ready_in_job_queue += 1
+                    cur_job = job_queue[0]
+                    values = features_map[cur_job]['features']
+                    spend = values[0]
+                    resource =  np.array(values[1:resource_dim + 1])
+                    if np.all(used_resource + resource <= resource_limit):
+                        used_resource += resource
+                        run_queue.put((wallclock + spend, spend, resource.tolist(), cur_job))
+                        job_queue.popleft()
+                    else:
+                        break
+                if run_queue.empty() and ready_in_job_queue == 0:
+                    return None
+        return wallclock
+    
     def makespan_time(self, dag_graph, scheduler_type='sft'):
         if scheduler_type == 'sft':
             return self.shortest_first_time(dag_graph)
@@ -276,8 +336,9 @@ class DAGraph(object):
             return self.critical_path_scheduling(dag_graph)
         elif scheduler_type == 'ts':
             return self.tetris_scheduling(dag_graph)
-
+    
     def shortest_first_time(self, graph, print_solution=False):
+        order = []
         dep_map, _, features_map = self.get_dependency_nodes(graph)
         run_queue = PriorityQueue()
         used_resource = [0.0] * self.resource_dim
@@ -315,20 +376,22 @@ class DAGraph(object):
                         used_resource = to_resource
                         completion_time = wallclock + spend
                         run_queue.put((completion_time, spend, resource, node))
+                        order.append(node)
             if print_solution:
                 print('wallclock {} processed {} queued {}'.format(
                     current_time, processed, run_queue.queue))
-        return wallclock
+        return wallclock, order
 
     def ranker_based_scheduling(self, graph, ranker, resource_limit):
+        order = []
         dep_map, _, features_map = self.get_dependency_nodes(graph)
         run_queue = PriorityQueue()
         used_resource = np.zeros(self.resource_dim)
         wallclock = 0.0
-        while not wallclock or not run_queue.empty():
+        processed = []
+        while not wallclock or len(processed)!=graph.number_of_nodes():
             # peek finished jobs from run_queue
             current_time = None
-            processed = []
             while not run_queue.empty():
                 completion_time, spend, resource, node = run_queue.get()
                 resource = np.array(resource)
@@ -360,11 +423,11 @@ class DAGraph(object):
             for values, node in combos:
                 spend = values[0]
                 resource =  np.array(values[1:resource_limit.shape[0] + 1])
-                if node not in run_nodes and \
-                        np.all(used_resource + resource <= resource_limit):
+                if node not in run_nodes and np.all(used_resource + resource <= resource_limit):
                     used_resource += resource
                     run_queue.put((wallclock + spend, spend, resource.tolist(), node))
-        return wallclock
+                    order.append(node)
+        return wallclock, order
 
     def shortest_first_scheduling(self, graph, resource_limit=None):
         if resource_limit is None:

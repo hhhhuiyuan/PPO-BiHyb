@@ -128,7 +128,7 @@ def get_lower_matrix_tsp(problem):
         adj_matrix.append(matrix_d)
     return adj_matrix
 
-
+#inspect data format here for tsp data
 def get_lower_matrix(problem, feas_weight=1, infeas_weight=10):
     dim = int(problem.dimension)
 
@@ -150,6 +150,7 @@ def get_lower_matrix(problem, feas_weight=1, infeas_weight=10):
             else:
                 matrix_d.append(infeas_weight)
         adj_matrix.append(matrix_d)
+    import pdb; pdb.set_trace()
     return adj_matrix
 
 

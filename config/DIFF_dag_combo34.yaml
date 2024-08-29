@@ -1,0 +1,35 @@
+# dag generation
+num_init_dags: 5
+train_sample: 8
+#test_sample: 10
+batch_size: 1
+random_seed: 1234
+save_path: "/data/shared/huiyuan/dag34_addedge/train.pkl"
+combo34: true
+add_edge: true
+
+# environment configs
+scheduler_type: cp
+gamma: 0.95
+resource_limit: 6000
+
+# learning configs
+lr_steps: []
+max_timesteps: 20
+k_epochs: 10
+update_timestep: 20
+learning_rate: 0.001
+eps_clip: 0.1
+
+# model parameters
+node_output_size: 32 #16
+gnn_layers: 5
+
+# test parameters
+search_size: 3
+
+# misc configs
+log_interval: 1
+test_interval: 50
+max_episodes: 5000
+test_model_weight: pretrained/PPO_cp_dag_num50_beam3_ratio0.0892.pt

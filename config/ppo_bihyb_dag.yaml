@@ -1,4 +1,3 @@
-# environment configs
 scheduler_type: cp
 num_init_dags: 50
 gamma: 0.95
