@@ -1,0 +1,24 @@
+#run by $python DIFF_dag_data.py --config DIFF_dag52.yaml
+# misc
+random_seed: 1234
+scheduler_type: cp
+split: test_greedy
+save_dir: "../data/shared/huiyuan/dag_combo52/0.9better_80g"
+
+# dag generation
+load_graph: 144
+#specify one of the following two
+#combo34: true
+combo52: true
+
+resource_limit: 600
+
+# add edge config
+add_edge: true
+addedge_per_graph: 10
+max_add: 5
+num_workers: 12
+test_addedge: true
+
+
+

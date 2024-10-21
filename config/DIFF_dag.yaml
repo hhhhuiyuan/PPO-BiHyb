@@ -2,12 +2,11 @@
 # misc
 random_seed: 1234
 scheduler_type: cp
-split: val
-save_dir: "/data/shared/huiyuan/dag52_addedge5"
-#save_dir: "/data/shared/huiyuan/dag25_addedge20"
+split: train
+save_dir: "../data/shared/huiyuan/dag_combo/dag52_addedge10_rescale"
 
 # dag generation
-load_graph: 128
+load_graph: 1000
 #specify one of the following two
 combo52: true
 #num_init_dags: 25
@@ -16,9 +15,9 @@ resource_limit: 6000
 resource_scale: 20.0
 
 # add edge config
-# add_edge: true
+add_edge: true
 addedge_per_graph: 32
-max_add: 5
+max_add: 10
 num_workers: 50
 
 

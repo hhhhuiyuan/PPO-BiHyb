@@ -50,9 +50,10 @@ def parse_arguments():
     parser.add_argument('--addedge_per_graph', default=128, type=int, help='number of trials to add edges per graph')
     parser.add_argument('--max_add', default=5, type=int)
     parser.add_argument('--num_workers', default=1, type=int, help='number of processes to generate data')  
-   
+    parser.add_argument('--test_addedge', action='store_true')
     args = parser.parse_args()
 
+    
     if args.config:
         with open('config/' + args.config) as f:
             cfg_dict = yaml.load(f)
@@ -104,12 +105,14 @@ def main(args):
     else:
         loaded_graphs = generate_diffusion_tpch(args.load_graph, False, *vargs)
     
-    if args.split != 'train' or not args.add_edge:
+    os.makedirs(args.save_dir, exist_ok=True)
+    
+    if not args.add_edge:
         save_path = os.path.join(args.save_dir, f'{args.split}.pkl')
         with open(save_path, 'wb') as f:
             pickle.dump(loaded_graphs, f)
     else:
-        add_edge_vargs = (args.addedge_per_graph, args.max_add, args.save_dir, args.num_workers, args.random_seed)
+        add_edge_vargs = (args.addedge_per_graph, args.max_add, args.save_dir, args.num_workers, args.random_seed, args.test_addedge)
         new_graphs_addedge(loaded_graphs, evaluator, *add_edge_vargs)
 
 

@@ -54,9 +54,10 @@ def chunked_graphs(data, chunk_size):
     for i in range(0, len(data), chunk_size):
         yield data[i:i + chunk_size] 
 
-def add_edge(graph_batch_with_seed, evaluator, num_new_graphs, total_adds):
+def add_edge(graph_batch_with_seed, evaluator, num_new_graphs, total_adds, test_mode):
     all_graphs = []
     imprv_ratio = []
+    all_max_imprv = []
     seed, graph_batch = graph_batch_with_seed
     random.seed(seed)
     print(seed)
@@ -97,72 +98,87 @@ def add_edge(graph_batch_with_seed, evaluator, num_new_graphs, total_adds):
             time_cost, order = evaluator.critical_path_scheduling(graph)
             real_cost = evaluator.scheduling_evaluator(graph_original, order)
                 
-            if len(new_graphs) <= math.floor(num_new_graphs*0.8) or better_graph_count >= math.floor(num_new_graphs*0.2):
+            if test_mode or len(new_graphs) <= math.floor(num_new_graphs*0.1) or better_graph_count >= math.floor(num_new_graphs*0.9):
+                relative_makespan = real_cost/graph.graph['makespan']
                 if real_cost < graph.graph['makespan']:
                     better_graph_count += 1
-                    better_makespan.append(real_cost)
-                print(f"makespan before: {graph.graph['makespan']}, after: {time_cost}, real_cost: {real_cost}")
+                    better_makespan.append(1-relative_makespan)
+                #print(f"makespan before: {graph.graph['makespan']}, after: {time_cost}, real_cost: {real_cost}")
                 add_graph = graph_original.copy()
-                add_graph.graph['makespan'] = real_cost
+                add_graph.graph['makespan'] = relative_makespan
                 add_graph.graph['order'] = order
                 add_graph.graph['added_edge'] = add_edges
                 add_graph.graph['scheduler'] = 'critical_path'
-                
                 new_graphs.append(add_graph)
+                print(relative_makespan)
             else:
                 num_sample_count += 1
                 if num_sample_count <= 200:
                     if real_cost < graph.graph['makespan']:
-                        better_makespan.append(real_cost)
-                        print(f"makespan before: {graph.graph['makespan']}, after: {time_cost}, real_cost: {real_cost}")
+                        relative_makespan = real_cost/graph.graph['makespan']
+                        better_makespan.append(1-relative_makespan)
+                        #print(f"makespan before: {graph.graph['makespan']}, after: {time_cost}, real_cost: {real_cost}")
                         add_graph = graph_original.copy()
-                        add_graph.graph['makespan'] = real_cost
+                        add_graph.graph['makespan'] = relative_makespan
+                        print(relative_makespan)
                         add_graph.graph['order'] = order
                         add_graph.graph['added_edge'] = add_edges
                         add_graph.graph['scheduler'] = 'critical_path'
                         new_graphs.append(add_graph)
                 else:
                     print("hard to find better graph, add anyway")
-                    print(f"makespan before: {graph.graph['makespan']}, after: {time_cost}, real_cost: {real_cost}")
+                    #print(f"makespan before: {graph.graph['makespan']}, after: {time_cost}, real_cost: {real_cost}")
+                    relative_makespan = real_cost/graph.graph['makespan']
                     add_graph = graph_original.copy()
-                    add_graph.graph['makespan'] = real_cost
+                    add_graph.graph['makespan'] = relative_makespan
+                    print(relative_makespan)
                     add_graph.graph['order'] = order
                     add_graph.graph['added_edge'] = add_edges
                     add_graph.graph['scheduler'] = 'critical_path'
                     new_graphs.append(add_graph)
         
         if len(better_makespan):
-            baseline = graph.graph['makespan']
-            ratio = (baseline - sum(better_makespan)/len(better_makespan))/baseline
+            ratio = sum(better_makespan)/len(better_makespan)
             imprv_ratio.append(ratio)
+            max_imprv = max(better_makespan)
+            all_max_imprv.append(max_imprv)
         else:
             ratio = 0.0
             imprv_ratio.append(ratio)
+            max_imprv = 0.0
+            all_max_imprv.append(max_imprv)
         all_graphs.extend(new_graphs)
-    return all_graphs, imprv_ratio
+    
+    #avg_max_imprv = sum(all_max_imprv)/len(all_max_imprv)
+    return all_graphs, imprv_ratio, all_max_imprv
                     
         
 
-def new_graphs_addedge(loaded_graphs, evaluator, samples_per_graph, total_adds, save_dir, num_workers, random_seed):
+def new_graphs_addedge(loaded_graphs, evaluator, samples_per_graph, total_adds, save_dir, num_workers, random_seed, test_mode):
     new_data = []
     #valid_data = []
     improvement_ratio = []
+    max_imprv_list = []
 
     with Pool() as p:
         ss = np.random.SeedSequence(random_seed)
         seeds = ss.spawn(num_workers)  
         
-        add_edge_processor = partial(add_edge, evaluator=evaluator, num_new_graphs=samples_per_graph, total_adds=total_adds) 
+        add_edge_processor = partial(add_edge, evaluator=evaluator, num_new_graphs=samples_per_graph, total_adds=total_adds, test_mode=test_mode) 
         batch_size = len(loaded_graphs) // num_workers 
         graph_batches_with_seeds = zip(seeds, chunked_graphs(loaded_graphs, batch_size))   
         new_graphs = p.map(add_edge_processor, graph_batches_with_seeds)
     
-    for new_batch, imprv_ratio in new_graphs:
+    for new_batch, imprv_ratio, max_imprv in new_graphs:
         new_data.extend(new_batch)
         improvement_ratio.extend(imprv_ratio)
+        max_imprv_list.extend(max_imprv)
     
+    print(f'total trials: {len(max_imprv_list)}, {len(improvement_ratio)}')
     print(f'In-average improvement in data is: {sum(improvement_ratio)/len(improvement_ratio)*100}%')
+    print(f'Max improvement in data is: {sum(max_imprv_list)/len(max_imprv_list)*100}%')
     
-    train_save_path = os.path.join(save_dir, 'train.pkl')       
-    with open(train_save_path, 'wb') as f:
-        pickle.dump(new_data, f)
+    if not test_mode:
+        train_save_path = os.path.join(save_dir, 'train.pkl')       
+        with open(train_save_path, 'wb') as f:
+            pickle.dump(new_data, f)

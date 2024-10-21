@@ -77,7 +77,6 @@ def load_job(resource_limit, feature_dim, resource_dim, file_path, query_size, q
     job_dag = nx.DiGraph()
     parents = {}
 
-    # nodes = []
     for index in range(num_nodes):
         n = offset + index
         parents[n] = []
@@ -86,7 +85,6 @@ def load_job(resource_limit, feature_dim, resource_dim, file_path, query_size, q
 
         num_tasks = len(task_duration['first_wave'][e]) + \
                     len(task_duration['rest_wave'][e])
-
         # remove fresh duration from first wave duration
         # drag nearest neighbor first wave duration to empty spots
         pre_process_task_duration(task_duration)
@@ -97,25 +95,23 @@ def load_job(resource_limit, feature_dim, resource_dim, file_path, query_size, q
 
         # generate a node
         features = [rough_duration / 5000.0]  # normalize duration by 5000 (true running time=x5000)
-        # features = [np.random.uniform(0, 1)]
+        
         if resource_dim == 1:
             features.extend([num_tasks / resource_limit])
-        else:
-            key_id = int(query_size.replace('g', '')) * tpch_num + int(query_idx)
-            np_random = np.random.RandomState(key_id)
-            features.extend(np.multiply(np_random.rand(resource_dim), 0.5))
-            #features.extend(np.multiply(np_random.randint(1, 6, resource_dim), 0.1))
-            #features.extend(np_random.uniform(0.1, 0.5, resource_dim))
-            #res = [0.1, 0.2, 0.3, 0.4, 0.5]
-            #indice = np_random.randint(0, len(res), resource_dim)
-            #features.extend(np.take(res, indice).tolist())
-            #res = [0.0016666666666666668, 0.0016666666666666668, 0.0016666666666666668, 0.0016666666666666668, 0.0033333333333333335, 0.0033333333333333335, 0.0033333333333333335, 0.0033333333333333335, 0.0033333333333333335, 0.0033333333333333335, 0.03166666666666667, 0.03166666666666667, 0.03166666666666667, 0.15166666666666667, 0.22166666666666668, 0.3333333333333333, 0.3333333333333333, 0.3333333333333333, 0.3333333333333333, 0.3333333333333333, 0.3333333333333333, 0.3333333333333333, 0.3333333333333333, 0.3333333333333333, 0.3333333333333333, 0.3333333333333333, 0.3333333333333333, 0.3333333333333333, 0.3333333333333333, 0.3333333333333333, 0.3333333333333333, 0.3333333333333333, 0.3333333333333333, 0.9883333333333333, 0.9883333333333333, 0.9883333333333333, 0.9883333333333333, 0.9883333333333333]
-            #indice = np_random.randint(0, len(res), resource_dim)
-            #features.extend(np.take(res, indice))
+        # else:
+        #     key_id = int(query_size.replace('g', '')) * tpch_num + int(query_idx)
+        #     np_random = np.random.RandomState(key_id)
+        #     features.extend(np.multiply(np_random.rand(resource_dim), 0.5))
+        #     #features.extend(np.multiply(np_random.randint(1, 6, resource_dim), 0.1))
+        #     #features.extend(np_random.uniform(0.1, 0.5, resource_dim))
+        #     #res = [0.1, 0.2, 0.3, 0.4, 0.5]
+        #     #indice = np_random.randint(0, len(res), resource_dim)
+        #     #features.extend(np.take(res, indice).tolist())
+        #     #res = [0.0016666666666666668, 0.0016666666666666668, 0.0016666666666666668, 0.0016666666666666668, 0.0033333333333333335, 0.0033333333333333335, 0.0033333333333333335, 0.0033333333333333335, 0.0033333333333333335, 0.0033333333333333335, 0.03166666666666667, 0.03166666666666667, 0.03166666666666667, 0.15166666666666667, 0.22166666666666668, 0.3333333333333333, 0.3333333333333333, 0.3333333333333333, 0.3333333333333333, 0.3333333333333333, 0.3333333333333333, 0.3333333333333333, 0.3333333333333333, 0.3333333333333333, 0.3333333333333333, 0.3333333333333333, 0.3333333333333333, 0.3333333333333333, 0.3333333333333333, 0.3333333333333333, 0.3333333333333333, 0.3333333333333333, 0.3333333333333333, 0.9883333333333333, 0.9883333333333333, 0.9883333333333333, 0.9883333333333333, 0.9883333333333333]
+        #     #indice = np_random.randint(0, len(res), resource_dim)
+        #     #features.extend(np.take(res, indice))
 
         job_dag.add_node(n, features=features)
-        # node = Node(n, rough_duration, num_tasks, features)
-        # nodes.append(node)
 
     # parent and child node info
     for i in range(num_nodes):
@@ -241,17 +237,17 @@ def load_tpch_combos34(resource_limit=600, feature_dim=2, resource_dim=1, num_in
                 num_init_dags=num_init_dags)
     job_dags, roots, offsets, graphs = [], [], [], []
     offset = 1
-    np.random.seed(int(resource_limit + num_init_dags + tid) * (dag_id + 1))
     combo_menu = {"tpch_node4": [1,14,19], "tpch_node6": [3,4,12], "tpch_node7": [13,15], "tpch_node8": [22,18], "tpch_node9": [10,16]}
     tpchs = [random.choice(v) for v in combo_menu.values()]
-    #print(tpchs)
 
     for i, t in enumerate(tpchs):
         offsets.append(offset)
 
         query_idx = t
-        query_size = args.tpch_size[np.random.randint(0, len(args.tpch_size))]
-
+        #idx_seed = np.random.randint(0, len(args.tpch_size))
+        idx_seed = 5
+        query_size = args.tpch_size[idx_seed]
+        
         job_dag, root = load_job(resource_limit, feature_dim, resource_dim, args.job_folder,
                                  query_size, query_idx, args.tpch_num, offset)
         offset += len(job_dag.nodes())
@@ -265,17 +261,18 @@ def load_tpch_combos52(resource_limit=600, feature_dim=2, resource_dim=1, num_in
                 num_init_dags=num_init_dags)
     job_dags, roots, offsets, graphs = [], [], [], []
     offset = 1
-    np.random.seed(int(resource_limit + num_init_dags + tid) * (dag_id + 1))
+    #np.random.seed(int(resource_limit + num_init_dags + tid) * (dag_id + 1))
     combo_menu = {"tpch_node4": [1,14,19], "tpch_node6": [3,4,12], "tpch_node7": [13,15], "tpch_node8": [22,18], "tpch_node9": [10,16],
                   "tpch_node18": [2, 8]}
     tpchs = [random.choice(v) for v in combo_menu.values()]
-    #print(tpchs)
 
     for i, t in enumerate(tpchs):
         offsets.append(offset)
 
         query_idx = t
-        query_size = args.tpch_size[np.random.randint(0, len(args.tpch_size))]
+        #query_size = args.tpch_size[np.random.randint(0, len(args.tpch_size))]
+        idx_seed = 5
+        query_size = args.tpch_size[idx_seed]
 
         job_dag, root = load_job(resource_limit, feature_dim, resource_dim, args.job_folder,
                                  query_size, query_idx, args.tpch_num, offset)
@@ -447,23 +444,30 @@ def generate_diffusion_tpch(num_graphs, combo_flag, dag_graph,
             #                   round(np.mean(resource_list[i]), 5),
             #                   round(np.max(resource_list[i]), 5))
             #                  for i in range(resource_dim)]
+            # print(resource_dist)
             #picked_scheduler, picked_order = dag_graph.makespan_time(merged_dag, scheduler_type)
             
+            # spend_list = []
             # total_spend = 0
             # total_res = 0
             # for node, data in merged_dag.nodes(data=True):
             #     total_spend = max(total_spend, data['features'][0]) 
             #     total_res += data['features'][1]
+            #     spend_list.append(data['features'][0])
             # print("total spend", total_spend)
             # print("total resource", total_res)
-
-            if combo_flag:
-                for node, data in merged_dag.nodes(data=True):
-                    data['features'][1] =  min(data['features'][1]*20.0, 0.99)
-            else:
-                if resource_scale > 0:
-                    for node, data in merged_dag.nodes(data=True):
-                        data['features'][1] =  min(data['features'][1]*resource_scale, 0.99)
+            # spend_dist = [round(np.min(spend_list), 5),
+            #                   round(np.mean(spend_list), 5),
+            #                   round(np.max(spend_list), 5)]
+            # print(spend_dist)
+            
+            # if combo_flag:
+            #     for node, data in merged_dag.nodes(data=True):
+            #         data['features'][1] =  min(data['features'][1]*20.0, 0.99)
+            # else:
+            #     if resource_scale > 0:
+            #         for node, data in merged_dag.nodes(data=True):
+            #             data['features'][1] =  min(data['features'][1]*resource_scale, 0.99)
             
             if not scheduler_type:
                 available_scheduler = ['shortest_first', 'critical_path', 'tetris']

@@ -3,7 +3,14 @@
 #SBATCH --nodes=1
 #SBATCH --time=6:00:00
 #SBATCH --cpus-per-task=50
-#submit by $sbatch dag_data.sh
-source activate Dag
+#SBATCH -A mengdigroup
+#SBATCH -p pli
 
-python DIFF_dag_data.py --config DIFF_dag.yaml
+#submit by $sbatch dag_data.sh
+
+module purge
+module load anaconda3/2023.9
+conda activate DAG
+
+#python DIFF_dag_data.py --config DIFF_dag.yaml
+python DIFF_dag_data.py --config DIFF_dag_test.yaml
